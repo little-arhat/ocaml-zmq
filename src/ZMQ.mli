@@ -1,140 +1,120 @@
 (* Copyright (c) 2011 Pedro Borges and contributors *)
 
-(** Module Exceptions *)
-type error =
-    EINVAL
-  | EFAULT
-  | EMTHREAD
-  | ETERM
-  | ENODEV
-  | EADDRNOTAVAIL
-  | EADDRINUSE
-  | ENOCOMPATPROTO
-  | EPROTONOSUPPORT
-  | EAGAIN
-  | ENOTSUP
-  | EFSM
-  | ENOMEM
-  | EINTR
-  | EUNKNOWN
+val version : unit -> int * int * int
 
-exception ZMQ_exception of error * string
 
 (** Context *)
 type context
 
 (** Creation and Destruction *)
-val init : ?io_threads:int -> unit -> context
+val init : int -> unit -> context
 val term : context -> unit
 
-val version : unit -> int * int * int
 
-module Socket :
-sig
-  type +'a t
-  type 'a kind
+(** Sockets *)
+type socket
 
-  type generic
-  type pair   = private generic
-  type pub    = private generic
-  type sub    = private generic
-  type req    = private generic
-  type rep    = private generic
-  type dealer = private generic
-  type router = private generic
-  type pull   = private generic
-  type push   = private generic
+type socket_type = 
+  | Req
+  | Rep
+  | Dealer
+  | Router
+  | Pub
+  | Sub
+  | Push
+  | Pull
+  | Pair
 
-  val pair   : pair kind
-  val pub    : pub kind
-  val sub    : sub kind
-  val req    : req kind
-  val rep    : rep kind
-  val dealer : dealer kind
-  val router : router kind
-  val pull   : pull kind
-  val push   : push kind
+val socket : context -> socket_type -> socket
+val close : socket -> unit
 
-  (** Creation and Destruction *)
-  val create : context -> 'a kind -> 'a t
-  val close : 'a t -> unit 
+type event = 
+ | Poll_in
+ | Poll_out
 
-  (** Wiring *)
-  val connect : 'a t -> string -> unit
-  val bind : 'a t -> string -> unit
+(** options *)
+type 'a socket_option
 
-  (** Send and Receive *)
-  type recv_option = R_none | R_no_block
-  val recv : ?opt:recv_option -> 'a t -> string
+val socket_type : socket_type socket_option
+val linger : int socket_option
+val reconnect_ivl : int socket_option
+val reconnect_ivl_max : int socket_option
+val backlog : int socket_option
+val maxmsgsize : int64 socket_option
+val swap : int64 socket_option
+val rate : int64 socket_option
+val recovery_ivl : int64 socket_option
+val recovery_ivl_msec : int64 socket_option
+val mcast_loop : bool socket_option
+val rcvmore : bool socket_option
+val hwm : int64 socket_option
+val affinity : bool array socket_option
+val sndbuf : int64 socket_option
+val rcvbuf : int64 socket_option
+val identity : string option socket_option
+val subscribe : string socket_option
+val unsubscribe : string socket_option
+val events : event list socket_option
 
-  type snd_option = S_none | S_no_block | S_more
-  val send : ?opt:snd_option -> 'a t -> string -> unit
+(** The documenation states that this option
+ *  should return and fd to be used with poll
+ *  the bindings return a file_descr compatible with Unix.select *)
+val fd : Unix.file_descr socket_option
 
-  (** Option Setters *)
-  exception Invalid_identity of string
-  val set_indentity : 'a t -> string -> unit
-  val set_high_water_mark : 'a t -> Uint64.t -> unit
-  val set_swap : 'a t -> int64 -> unit
-  val set_affinity : 'a t -> Uint64.t -> unit
-  val set_rate : 'a t -> int64 -> unit
-  val set_recovery_interval : 'a t -> int64 -> unit
-  val set_recovery_interval_msec : 'a t -> int64 -> unit
-  val set_multicast_loop : 'a t -> bool -> unit
-  val set_recv_buffer_size : 'a t -> Uint64.t -> unit
-  val set_snd_buffer_size : 'a t -> Uint64.t -> unit
-  val set_linger : 'a t -> int -> unit
-  val set_reconnect_interval : 'a t -> int -> unit
-  val set_reconnect_interval_max : 'a t -> int -> unit
-  val set_backlog : 'a t -> int -> unit
+val getsockopt : socket -> 'a socket_option -> 'a
+val setsockopt : socket -> 'a socket_option -> 'a -> unit
 
-  val subscribe : sub t -> string -> unit
-  val unsubscribe : sub t -> string -> unit
+val connect : socket -> string -> unit
+val bind : socket -> string -> unit
 
-  (** Option Getters *)
-  val has_more : 'a t -> bool
-  val high_water_mark : 'a t -> Uint64.t
-  val swap : 'a t -> int64
-  val affinity : 'a t -> Uint64.t
-  val identity : 'a t -> string
-  val rate : 'a t -> int64
-  val recovery_interval : 'a t -> int64
-  val recovery_interval_msec : 'a t -> int64
-  val multicast_loop : 'a t -> int64
-  val snd_buffer_size : 'a t -> Uint64.t
-  val recv_buffer_size : 'a t -> Uint64.t
-  val linger : 'a t -> int
-  val reconnect_interval : 'a t -> int 
-  val reconnect_interval_max : 'a t -> int
-  val backlog : 'a t -> int
+type recv_option = [`No_block]
+val recv : socket -> recv_option list -> string
 
-  type event = No_event | Poll_in | Poll_out | Poll_in_out
-  val events : 'a t -> event
+type send_option = [`No_block | `Snd_more]
+val send : socket -> string -> send_option list -> unit
 
-  (** val kind: 'a t -> ? *)
-  (** val fd : 'a t -> int ? incompatible with windows *)
+(** Create a message once and send it multiple times without copy *)
+type message
+val message : string -> message
+val send_msg : socket -> message -> send_option list -> unit
 
-end
+(** Devices *)
+
+type device_type =
+  | Queue
+  | Streamer
+  | Forwarder
+
+val device : device_type -> socket -> socket -> unit
+
+(** Poll *)
+
+type poller
+type poll_item = socket * event list
+(** Retuns a list of poll items with the available events received *)
+
+val poller : poll_item list -> poller
+val poll : poller -> int -> poll_item list
 
 
-module Device :
-sig
+(** Exceptions *)
 
-  val streamer  :   Socket.pull Socket.t ->   Socket.push Socket.t -> unit
-  val forwarder :    Socket.sub Socket.t ->    Socket.pub Socket.t -> unit
-  val queue     : Socket.router Socket.t -> Socket.dealer Socket.t -> unit
+(* Invalid_argument - standard ocaml error *)
+exception Interrupted of string
+exception Terminated of string
+exception Protocol_not_supported of string
+exception Protocol_not_compatible of string
+exception Unavailable_threads of string
+exception Address_in_use of string
+exception Address_not_available of string
+exception Nonexistant_interface of string
+exception No_memory of string
+exception Try_again of string
+exception Operation_not_supported of string
+exception Invalid_socket_state of string
 
-end
+(* What happens when an option is set from the worng socket type *)
 
-module Poll :
-sig
-  
-  type t
-
-  type event_mask = In | Out | In_out
-  type 'a poll_item = ('a Socket.t * event_mask)
-
-  val of_poll_items : 'a poll_item array -> t
-
-  val poll : ?timeout: int -> t -> 'a poll_item array
-
-end
+(* If this exception is raised it means there 
+ * is an error in the bindings *)
+exception Unknown_error of string

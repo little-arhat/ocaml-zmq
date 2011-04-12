@@ -1,279 +1,161 @@
 (* Copyright (c) 2011 Pedro Borges and contributors *)
 
-(** Module Exceptions *)
-
-type error =
-    EINVAL
-  | EFAULT
-  | EMTHREAD
-  | ETERM
-  | ENODEV
-  | EADDRNOTAVAIL
-  | EADDRINUSE
-  | ENOCOMPATPROTO
-  | EPROTONOSUPPORT
-  | EAGAIN
-  | ENOTSUP
-  | EFSM
-  | ENOMEM
-  | EINTR
-  | EUNKNOWN
-
-exception ZMQ_exception of error * string
-
-let _ =
-  Callback.register_exception "zmq exception" (ZMQ_exception(EUNKNOWN,"Unkown error"))
-
-
-(** Context *)
-type context
-
-(** Creation and Destruction *)
-
-external native_init : int -> context = "caml_zmq_init"
-let init ?(io_threads = 1) () = native_init io_threads
-
-external term : context -> unit = "caml_zmq_term"
-
 external version : unit -> int * int * int = "caml_zmq_version"
 
-module Socket = struct
 
-  type +'a t
+type context
 
-  (** This is an int so we know which socket we
-    * are building inside the external functions *)
+external init : int -> context = "caml_zmq_init"
+external term : context -> unit = "caml_zmq_term"
 
-  type 'a kind = int
+type socket
 
-  type generic
-  type pair   = private generic
-  type pub    = private generic
-  type sub    = private generic
-  type req    = private generic
-  type rep    = private generic
-  type dealer = private generic
-  type router = private generic
-  type pull   = private generic
-  type push   = private generic
+type socket_type = 
+  | Req
+  | Rep
+  | Dealer
+  | Router
+  | Pub
+  | Sub
+  | Push
+  | Pull
+  | Pair
 
-  let pair   = 0
-  let pub    = 1
-  let sub    = 2
-  let req    = 3
-  let rep    = 4
-  let dealer = 5
-  let router = 6
-  let pull   = 7
-  let push   = 8
+external socket : context -> socket_type -> socket = "caml_zmq_socket"
+external close : socket -> unit = "caml_zmq_close"
 
-  (** Creation and Destruction *)
-  external create : context -> 'a kind -> 'a t = "caml_zmq_socket"
-  external close : 'a t -> unit = "caml_zmq_close"
+type 'a socket_option = (socket -> 'a -> unit) * (socket -> 'a)
 
-  (** Wiring *)
-  external connect : 'a t -> string -> unit = "caml_zmq_connect"
-  external bind : 'a t -> string -> unit = "caml_zmq_bind"
+let no_get_opt _ : socket -> 'a = invalid_arg "This option cannot be gotten."
+let no_set_opt _ _ : socket -> 'a -> unit = invalid_arg "This option cannot be set."
 
-  (** Send and Receive *)
-  type recv_option = R_none | R_no_block
+type int_option =
+  | Linger
+  | Reconnect_ivl
+  | Reconnect_ivl_max 
+  | Backlog
 
-  external native_recv : 'a t -> recv_option -> string = "caml_zmq_recv"
-  let recv ?(opt = R_none) socket = native_recv socket opt
-  
-  type snd_option = S_none | S_no_block | S_more
+external set_int_sockopt : int_option -> socket -> int -> unit =
+        "caml_zmq_set_int_sockopt"
+external get_int_sockopt : int_option -> socket -> int =
+        "caml_zmq_get_int_sockopt"
 
-  external native_send : 'a t -> string -> snd_option-> unit = "caml_zmq_send"
-  let send ?(opt = S_none) socket message = native_send socket message opt
+type int64_option =
+  | Swap
+  | Recovery_ivl
+  | Recovery_ivl_max
+  | Hwm
+  | Snd_buff
+  | Rcv_buff
+
+external set_int64_sockopt : int64_option -> socket -> int64 -> unit =
+        "caml_zmq_set_int64_sockopt"
+external get_int64_sockopt : int64_option -> socket -> int64 =
+        "caml_zmq_get_int64_sockopt"
+
+type string_option =
+  | Identity
+  | Subscribe
+  | Unsubscribe
+
+external set_string_sockopt : string_option -> socket -> string -> unit =
+        "caml_zmq_set_int64_sockopt"
+external get_string_sockopt : string_option -> socket -> string =
+        "caml_zmq_get_int64_sockopt"
+
+type bool_option =
+ | Mcast_loop
+ | Rcv_more
+
+external set_bool_sockopt : string_option -> socket -> bool -> unit =
+        "caml_zmq_set_bool_sockopt"
+external get_bool_sockopt : string_option -> socket -> bool =
+        "caml_zmq_get_bool_sockopt"
+
+external get_type_sockopt : socket -> socket_type =
+        "caml_zmq_get_type_sockopt"
+
+external get_event_sockopt : socket -> list event =
+        "caml_zmq_get_event_sockopt"
+
+external get_fd_sockopt : socket -> Unix.file_descr =
+        "caml_zmq_get_fd_sockopt"
+
+type bool_array_option =
+  | Affinity
+
+external set_bool_array_sockopt' : bool_array_option -> socket -> bool array -> unit =
+        "caml_zmq_set_bool_array_sockopt"
+
+let set_bool_array_sockopt opt sock value =
+  if Array.length n <> 64 then
+    invalid_arg "Affinity array must have 64 positions"
+  else
+    set_bool_array_sockopt' opt sock value
+
+external get_bool_array_sockopt : bool_array_option -> socket -> bool array =
+        "caml_zmq_get_bool_array_sockopt"
 
 
-  (** Native Option Setters (private) *)
-  type int64_option =
-      Swap
-    | Rate
-    | Recovery_interval
-    | Recovery_interval_msec
-    | Multicast_loop
-    | Receive_more
+let socket_type type = (no_set_opt, get_type_sockopt)
+let linger = (get_int_sockopt Linger, set_int_sockopt Linger)
+let reconnect_ivl = (get_int_sockopt Reconnect_ivl, set_int_sockopt Recovery_ivl)
+let reconnect_ivl_max = (get_int_sockopt Reconnect_ivl_max, set_int_sockopt Recovery_ivl_max)
+val backlog = (get_int_sockopt Backlog, set_int_sockopt Backlog)
+val swap : int64 socket_option
+val rate : int64 socket_option
+val recovery_ivl : int64 socket_option
+val recovery_ivl_msec : int64 socket_option
+val mcast_loop : bool socket_option
+val rcvmore : bool socket_option
+val hwm : int64 socket_option
+val affinity : bool array socket_option
+val sndbuf : int64 socket_option
+val rcvbuf : int64 socket_option
+val identity : string option socket_option
+val subscribe : string socket_option
+val unsubscribe : string socket_option
+val events : event list socket_option
 
-  external set_int64_option :
-    'a t -> int64_option -> int64 -> unit = "caml_zmq_set_int64_option"  
-  
-  type bytes_option =
-      Identity
-    | Subscribe
-    | Unsubscribe
 
-  external set_bytes_option :
-    'a t -> bytes_option -> string -> unit = "caml_zmq_set_bytes_option"  
+let getsockopt socket opt = (snd opt) socket
+let setsockopt socket opt value = (fst opt) socket value
 
-  type uint64_option = 
-      High_water_mark
-    | Affinity
-    | Send_buffer
-    | Receive_buffer
+external connect : socket -> string -> unit =
+        "caml_zmq_connect"
 
-  external set_uint64_option :
-    'a t -> uint64_option -> Uint64.t -> unit = "caml_zmq_set_uint64_option"
+external bind : socket -> string -> unit = 
+        "caml_zmq_bind"
 
-  type int_option = 
-      Linger
-    | Reconnect_interval
-    | Reconnect_interval_max
-    | Backlog
+(** Send / Receive *)
 
-  external set_int_option :
-    'a t -> int_option -> int -> unit = "caml_zmq_set_int_option"
+external recv : socket -> recv_option' -> string =
+        "caml_zmq_recv"
+external send : socket -> string -> send_option' -> unit=
+        "caml_zmq_send"
 
-  (** Option Setters *)
-  let set_high_water_mark socket new_mark =
-    set_uint64_option socket High_water_mark new_mark
+external message : string -> message = 
+        "caml_zmq_message"
 
-  let set_swap socket new_swap =
-    set_int64_option socket Swap new_swap
+external send_msg : socket -> message -> send_option list -> unit =
+        "caml_zmq_send_message"
 
-  let set_affinity socket new_affinity =
-    set_uint64_option socket Affinity new_affinity
+type device_type =
+  | Queue
+  | Streamer
+  | Forwarder
 
-  exception Invalid_identity of string
+external device : device_type -> socket -> socket -> unit = 
+        "caml_zmq_device"
 
-  let identity_max_len = 255 and identity_min_len = 1
+type poller
+type poll_item = socket * event list
 
-  let set_indentity socket new_identity =
-    let identity_len = String.length new_identity in
-      if identity_len < identity_min_len || identity_len > identity_max_len then
-        raise (Invalid_identity new_identity)
-      else
-        set_bytes_option socket Identity new_identity
+external poller : poll_item list -> poller =
+        "caml_zmq_poller"
 
-  let subscribe socket new_subscription =
-    set_bytes_option socket Subscribe new_subscription
+external poll : poller -> int -> poll_item list =
+        "caml_zmq_poll"
 
-  let unsubscribe socket old_subscription =
-    set_bytes_option socket Unsubscribe old_subscription
-  
-  let set_rate socket new_rate =
-    set_int64_option socket Rate new_rate
-
-  let set_recovery_interval socket new_rinterval =
-    set_int64_option socket Recovery_interval new_rinterval
-
-  let set_recovery_interval_msec socket new_rinterval =
-    set_int64_option socket Recovery_interval_msec new_rinterval
-
-  let set_multicast_loop socket new_mcast_loop =
-    let int64_val = if new_mcast_loop then 1L else 0L in
-      set_int64_option socket Multicast_loop int64_val
-
-  let set_recv_buffer_size socket new_size =
-    set_uint64_option socket Receive_buffer new_size
-
-  let set_snd_buffer_size socket new_size =
-    set_uint64_option socket Send_buffer new_size
-
-  let set_linger socket new_linger =
-    set_int_option socket Linger new_linger
-
-  let set_reconnect_interval socket new_interval =
-    set_int_option socket Reconnect_interval new_interval
-
-  let set_reconnect_interval_max socket new_max =
-    set_int_option socket Reconnect_interval_max new_max
-  
-  let set_backlog socket new_back =
-    set_int_option socket Backlog new_back
-
-  (** Native Option Getters (private) *)
-  external get_int64_option :
-    'a t -> int64_option -> int64 = "caml_zmq_get_int64_option"
-
-  external get_bytes_option :
-    'a t -> bytes_option -> string = "caml_zmq_get_bytes_option"
-
-  external get_uint64_option :
-    'a t -> uint64_option -> Uint64.t = "caml_zmq_get_uint64_option"
-
-  external get_int_option :
-    'a t -> int_option -> int = "caml_zmq_get_int_option"
-
-  (** Option Getters *)
-  let has_more socket =
-    let opt_value = get_int64_option socket Receive_more in
-      opt_value = 1L
-
-  let high_water_mark socket =
-    get_uint64_option socket High_water_mark
-
-  let swap socket =
-    get_int64_option socket Swap
-
-  let affinity socket =
-    get_uint64_option socket Affinity
-
-  let identity socket =
-    get_bytes_option socket Identity
-
-  let rate socket =
-    get_int64_option socket Rate
-
-  let recovery_interval socket =
-    get_int64_option socket Recovery_interval
-
-  let recovery_interval_msec socket = 
-    get_int64_option socket Recovery_interval_msec
-
-  let multicast_loop socket =
-    get_int64_option socket Multicast_loop
-
-  let snd_buffer_size socket =
-    get_uint64_option socket Send_buffer
-
-  let recv_buffer_size socket =
-    get_uint64_option socket Receive_buffer
-
-  let linger socket =
-    get_int_option socket Linger
-
-  let reconnect_interval socket =
-    get_int_option socket Reconnect_interval
-
-  let reconnect_interval_max socket =
-    get_int_option socket Reconnect_interval_max
-
-  let backlog socket =
-    get_int_option socket Backlog
-
-  type event = No_event | Poll_in | Poll_out | Poll_in_out
-  external events : 'a t -> event = "caml_zmq_get_events"
-end
-
-module Device = struct
-
-  type kind = 
-      Streamer
-    | Forwarder
-    | Queue
-
-  external create :
-    kind -> 'a Socket.t -> 'b Socket.t -> unit = "caml_zmq_device"
- 
-  let streamer frontend backend = create Streamer frontend backend
-  let forwarder frontend backend = create Forwarder frontend backend
-  let queue frontend backend = create Queue frontend backend
-
-end
-
-module Poll = struct
-  
-  type t
-
-  type event_mask = In | Out | In_out
-  type 'a poll_item = ('a Socket.t * event_mask)
-
-  external of_poll_items : 'a poll_item array -> t = "caml_zmq_poll_of_pollitem_array"
-
-  external native_poll: t -> int -> 'a poll_item array = "caml_zmq_poll"
-
-  let poll ?(timeout = -1) items = 
-    native_poll items timeout
-end
+let () =
+  (** Register exceptions register poly variant values *)
